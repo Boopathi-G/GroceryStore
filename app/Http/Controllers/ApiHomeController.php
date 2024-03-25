@@ -7,10 +7,25 @@ use Illuminate\Support\Facades\DB;
 
 class ApiHomeController extends Controller
 {
+    public function send_message($mob, $otp)
+    {
+        $otpmsg = $otp . ' is your OTP to verify your mobile number on Nithra app/website.';
+        ob_start();
+        $ch = curl_init();
+        $msg = urlencode($otpmsg);
+        $url = "http://api.msg91.com/api/sendhttp.php?sender=NITHRA&route=4&mobiles=" . $mob . "&authkey=221068AW6ROwfK5b2782c0&country=91&campaign=pooja_store&message=" . $msg . "&DLT_TE_ID=1307160853199181365";
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_exec($ch);
+        curl_close($ch);
+        ob_end_clean();
+    }
+
     public function HomeScreen(Request $request)
     {
         $action = $request->input('action');
         $output = array();
+
         switch ($action) {
             case 'country_code':
                 $userData = DB::table('country_code')->where('is_delete', '=', 0)->select('country', 'code')->get();
@@ -39,9 +54,19 @@ class ApiHomeController extends Controller
                             'country_code' => $request->code, 'otptime' => now()]);
                     }
                     if ($mobile != '9987654321') {
-//                        send_message($mobile, $msg, "1307160853199181365");
+//                       send_message($mobile, $msg, "1307160853199181365");
+                        $otpmsg = $otp . ' is your OTP to verify your mobile number on Nithra app/website.';
+                        ob_start();
+                        $ch = curl_init();
+                        $msg = urlencode($otpmsg);
+                        $url = "http://api.msg91.com/api/sendhttp.php?sender=NITHRA&route=4&mobiles=" . $mobile . "&authkey=221068AW6ROwfK5b2782c0&country=91&campaign=pooja_store&message=" . $msg . "&DLT_TE_ID=1307160853199181365";
+//                        return $url;
+                        curl_setopt($ch, CURLOPT_URL, $url);
+                        curl_setopt($ch, CURLOPT_HEADER, 0);
+                        curl_exec($ch);
+                        curl_close($ch);
+                        ob_end_clean();
                     }
-
                     $output = ['status' => 'success', 'otp' => $otp];
                 } else {
                     $output = ['status' => 'failure'];
