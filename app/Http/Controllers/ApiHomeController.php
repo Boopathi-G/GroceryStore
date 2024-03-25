@@ -72,16 +72,47 @@ class ApiHomeController extends Controller
                 ];
                 return $output;
                 break;
+            case 'code_generate':
+                $mobile = $request->input('mobile');
+//                return $mobile;
+                // Attempt to generate a code up to 20 times to avoid infinite loops
+                for ($attempt = 0; $attempt < 20; $attempt++) {
+                    $code = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(10)); // Generate a random
+                    if (!DB::table('seller_table')->where('private_code', $code)->exists()) {
+                        DB::table('seller_table')->where('mobile', $request->mobile)->update(['private_code' => $code]);
+                        $output = ['status' => 'success', 'code' => $code];
+                        return response()->json($output);
+                    }
+                }
+                $output = ['success' => false, 'message' => 'Failed to generate a unique code.'];
+                return response()->json($output);
+                break;
             case 'save_form':
-                $type = $request->type;
-                return $type;
-               $update_array = ['is_allocated' => 1, 'allocated_id' => $nuser_id,];
-                $output = [
-                    'state' => DB::table('state')->select('id', 'english as state_name')->get(),
-                    'district' => DB::table('district')->select('id', 'state as state_id', 'english as district_name')->get(),
-                    'city' => DB::table('city')->select('id', 'state as state_id', 'district', 'english as city_name')->get(),
+                $mobile = $request->input('mobile');
+                $update_array = [
+                    'name' => $request->name,
+                    'state' => $request->state,
+                    'district' => $request->district,
+                    'city' => $request->city,
+                    'pincode' => $request->pincode,
+                    'place' => $request->place,
+                    'house_no' => $request->house_no,
+                    'street' => $request->street,
+                    'cdate' => now(),
                 ];
-                return $output;
+                if ($request->type == 1) {
+                    unset($update_array['name']); // Unset the 'name' key
+                    $update_array['private_code'] = $request->unicode;
+                    $update_array['shop_name'] = $request->shop_name;
+                    $update_array['owner_name'] = $request->owner_name;
+                    $update_array['shop_mobile'] = $request->shop_mobile;
+                }
+                $table_data = $request->type == 1 ? 'seller_table' : 'buyer_table';
+                $rowsAffected = DB::table($table_data)
+                    ->where('mobile', $mobile)
+                    ->update($update_array);
+                $response = ($rowsAffected > 0) ? ['status' => 'success'] : ['status' => 'failure'];
+                return $response;
                 break;
             default:
                 // Handle the default case if necessary
