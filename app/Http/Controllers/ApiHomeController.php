@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use App\Imports\UsersImport;
+use Illuminate\Support\Facades\Redis;
 
 class ApiHomeController extends Controller
 {
@@ -47,10 +50,10 @@ class ApiHomeController extends Controller
                 if ($mobile) {
                     if (DB::table($table_data)->where('mobile', $mobile)->exists()) {
 
-                        DB::table($table_data)->where('mobile', $mobile)->update(['otp' => $otp,'country' => $request->country,
+                        DB::table($table_data)->where('mobile', $mobile)->update(['otp' => $otp, 'country' => $request->country,
                             'country_code' => $request->code]);
                     } else {
-                        DB::table($table_data)->insertOrIgnore(['mobile' => $mobile, 'otp' => $otp,'country' => $request->country,
+                        DB::table($table_data)->insertOrIgnore(['mobile' => $mobile, 'otp' => $otp, 'country' => $request->country,
                             'country_code' => $request->code, 'otptime' => now()]);
                     }
                     if ($mobile != '9987654321') {
@@ -67,6 +70,7 @@ class ApiHomeController extends Controller
                         curl_close($ch);
                         ob_end_clean();
                     }
+
                     $output = ['status' => 'success', 'otp' => $otp];
                 } else {
                     $output = ['status' => 'failure'];
@@ -127,9 +131,22 @@ class ApiHomeController extends Controller
                 ];
                 if ($request->type == 1) {
                     unset($update_array['name']); // Unset the 'name' key
+                    $shop_image = '';
+                    $image_final = '';
+                    $cloudFrontUrl = "https://d314xssrurywid.cloudfront.net";
+                    if ($request->file('shop_image')) {
+                        $file = $request->file('shop_image');
+                        $shop_image = $request->file('shop_image')->store(
+                            '',
+                            's3'
+                        );
+                        $image_final = $cloudFrontUrl . '/' . $shop_image;
+                    }
+//                    return $image_final;
                     $update_array['private_code'] = $request->unicode;
                     $update_array['shop_name'] = $request->shop_name;
                     $update_array['owner_name'] = $request->owner_name;
+                    $update_array['img1'] = $image_final;
                     $update_array['shop_mobile'] = $request->shop_mobile;
                 }
                 $table_data = $request->type == 1 ? 'seller_table' : 'buyer_table';
@@ -138,6 +155,28 @@ class ApiHomeController extends Controller
                     ->update($update_array);
                 $response = ($rowsAffected > 0) ? ['status' => 'success'] : ['status' => 'failure'];
                 return $response;
+                break;
+            case 'home_screen':
+                $table_data = $request->type == 1 ? 'seller_table' : 'buyer_table';
+                $search_text = $request->search_text;
+                if ($request->type == 2){
+                    $req_id = DB::table('buyer_request')->where('bid', $request->bid)->pluck('sid')->implode(',');
+                $sellers = DB::table('seller_table')
+                    ->when($search_text, function ($query) use ($search_text) {
+                        return $query->where('private_code', $search_text);
+                    })
+                    ->when(!$search_text, function ($query) use ($req_id) {
+                        return $query->whereIn('id', explode(',', $req_id));
+                    })
+                    ->get();
+
+                 }else{
+//                    echo 'asdf';exit;
+                    $sellers = DB::table($table_data)->select('id', 'mobile','private_code','shop_name','owner_name','shop_mobile','house_no','street')->where('id', $request->sid)->get();
+                }
+                $output = $sellers->isEmpty() ? [['status' => 'failure']] : [['status' => 'success', 'seller_data' => $sellers]];
+                return $output;
+
                 break;
             default:
                 // Handle the default case if necessary
