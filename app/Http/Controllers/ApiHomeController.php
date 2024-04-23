@@ -12,7 +12,7 @@ class ApiHomeController extends Controller
 {
     public function send_message($mob, $otp)
     {
-        $otpmsg = $otp . ' is your OTP to verify your mobile number on Nithra app/website.';
+        $otpmsg = $otp . ' is your OTPs to verify your mobile number on Nithra app/website.';
         ob_start();
         $ch = curl_init();
         $msg = urlencode($otpmsg);
@@ -49,7 +49,6 @@ class ApiHomeController extends Controller
                 }
                 if ($mobile) {
                     if (DB::table($table_data)->where('mobile', $mobile)->exists()) {
-
                         DB::table($table_data)->where('mobile', $mobile)->update(['otp' => $otp, 'country' => $request->country,
                             'country_code' => $request->code]);
                     } else {
@@ -70,7 +69,6 @@ class ApiHomeController extends Controller
                         curl_close($ch);
                         ob_end_clean();
                     }
-
                     $output = ['status' => 'success', 'otp' => $otp];
                 } else {
                     $output = ['status' => 'failure'];
@@ -156,25 +154,41 @@ class ApiHomeController extends Controller
                 $response = ($rowsAffected > 0) ? ['status' => 'success'] : ['status' => 'failure'];
                 return $response;
                 break;
+            case 'send_request':
+                DB::table('buyer_request')->insertOrIgnore(['bid' => $request->bid, 'sid' => $request->sid,
+                    'is_request' => 0, 'cdate' => now()]);
+                $output[] = ['status' => 'success'];
+                return $output;
+                break;
             case 'home_screen':
                 $table_data = $request->type == 1 ? 'seller_table' : 'buyer_table';
                 $search_text = $request->search_text;
-                if ($request->type == 2){
-                    $req_id = DB::table('buyer_request')->where('bid', $request->bid)->pluck('sid')->implode(',');
-                $sellers = DB::table('seller_table')
-                    ->when($search_text, function ($query) use ($search_text) {
-                        return $query->where('private_code', $search_text);
-                    })
-                    ->when(!$search_text, function ($query) use ($req_id) {
-                        return $query->whereIn('id', explode(',', $req_id));
-                    })
-                    ->get();
-
-                 }else{
-//                    echo 'asdf';exit;
-                    $sellers = DB::table($table_data)->select('id', 'mobile','private_code','shop_name','owner_name','shop_mobile','house_no','street')->where('id', $request->sid)->get();
+                $sellers=[];
+                if ($request->type == 2) {
+//                    echo 'asd';exit();
+                    $sellers = DB::table('seller_table as st')
+                        ->select('st.id', 'st.mobile', 'st.private_code', 'st.shop_name', 'st.owner_name', 'st.shop_mobile', 'st.img1', 'br.is_request',  DB::raw("CASE WHEN br.is_request IS NULL THEN '' ELSE br.is_request END as is_request"))
+                        ->leftjoin('buyer_request as br', 'st.id', '=', 'br.sid')
+                        ->when($search_text, function ($query) use ($search_text) {
+                            return $query->where('st.private_code', $search_text);
+                        })
+                        ->when(!$search_text, function ($query) use ($request) {
+                            return $query->where('br.bid', $request->bid);
+                        })
+                        ->groupBy('st.id', 'br.is_request')
+                        ->get();
+//                     dd($sellers);exit;
                 }
-                $output = $sellers->isEmpty() ? [['status' => 'failure']] : [['status' => 'success', 'seller_data' => $sellers]];
+                else{
+//                    echo 'asdf';exit;
+                    $sellers = DB::table($table_data)
+                            ->select('id', 'mobile','private_code','shop_name','owner_name','shop_mobile','house_no','street','img1','street','house_no','place','pincode',
+                            DB::raw("CONCAT(house_no, ' ', street, ', ', place, ', ', pincode, ', ', IF(state > 0, (SELECT `s`.`english` FROM `state` s WHERE `s`.`id`=`state`), '---'), ', ', IF(district > 0, (SELECT `d`.`english` FROM `district` d WHERE `d`.`id`=`district`), '---'), ', ', IF(city > 0, (SELECT `c`.`english` FROM `city` c WHERE `c`.`id`=`city`), '---')) as full_address")
+                        )
+                        ->where('id', $request->sid)
+                        ->first();
+                }
+                $output = collect($sellers)->isEmpty() ? [['status' => 'failure']] : [['status' => 'success', 'seller_data' => $sellers]];
                 return $output;
 
                 break;
